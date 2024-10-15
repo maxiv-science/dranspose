@@ -1,4 +1,4 @@
-# dranspose
+# Dranspose
 
 dranspose is a framework to perform a distributed transpose from multiple streams of partial events into parallel workers with full events.
 
