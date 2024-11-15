@@ -1,9 +1,16 @@
+import logging
 import asyncio
 import json
 from uuid import UUID
 
+import redis.asyncio as redis
+from redis import Redis
+import zmq
+import zmq.asyncio
+
 from pydantic import UUID4
 import pytest
+
 from dranspose.mapping import MappingSequence
 from dranspose.helpers.utils import parameters_hash, done_callback, cancel_and_wait
 
@@ -14,25 +21,22 @@ from dranspose.protocol import (
     ParameterName,
     WorkParameter,
     WorkerName,
+    IngesterState,
+    ConnectedWorker,
+    StreamName,
 )
-
-import logging
-import redis.asyncio as redis
-from redis import Redis
 
 from dranspose.distributed import DistributedService, DistributedSettings
 from dranspose.worker import WorkerState, Worker, WorkerSettings
-import zmq
-import zmq.asyncio
-
-from dranspose.protocol import IngesterState, ConnectedWorker, StreamName
 
 from dranspose.ingester import IngesterSettings
+
+from dranspose.protocol import IngesterName
 
 
 class DummyWorker(DistributedService):
     def __init__(self, name: WorkerName):
-        self._worker_settings = DistributedSettings()
+        self._worker_settings = DistributedSettings()  # type: ignore[call-arg]
 
         state = WorkerState(
             name=name,
@@ -91,17 +95,17 @@ async def publish_parameters(
             logging.warning(
                 "the redis parameters don't match the controller parameters, rewriting"
             )
-            async with rds.pipeline() as pipe:
+            async with rds.pipeline() as pipe:  # type: ignore[attr-defined]
                 for name, param in parameters.items():
                     await pipe.set(RedisKeys.parameters(name, param.uuid), param.data)
                 await pipe.execute()
 
 
-async def get_published_worker_congig(rds: Redis) -> None:
-    async with rds.pipeline() as pipe:
+async def get_published_worker_congig(rds: Redis) -> list[str]:
+    async with rds.pipeline() as pipe:  # type: ignore[attr-defined]
         await pipe.keys(RedisKeys.config("worker"))
         worker_keys = await pipe.execute()
-    async with rds.pipeline() as pipe:
+    async with rds.pipeline() as pipe:  # type: ignore[attr-defined]
         await pipe.mget(worker_keys[0])
         worker_json = await pipe.execute()
     return worker_json[0]
@@ -111,6 +115,7 @@ async def get_published_worker_congig(rds: Redis) -> None:
 async def test_distributed() -> None:
     dummy = DummyWorker(WorkerName("dummy"))
 
+    assert dummy._distributed_settings is not None
     rds: Redis = redis.from_url(
         f"{dummy._distributed_settings.redis_dsn}?decode_responses=True&protocol=3"
     )
@@ -174,8 +179,9 @@ class IngestOnlyWorker(Worker):
 
 @pytest.mark.asyncio
 async def test_ingest_only_worker() -> None:
-    dummy = IngestOnlyWorker(WorkerSettings(worker_name="dummy"))
+    dummy = IngestOnlyWorker(WorkerSettings(worker_name=WorkerName("dummy")))  # type: ignore[call-arg]
 
+    assert dummy._distributed_settings is not None
     rds: Redis = redis.from_url(
         f"{dummy._distributed_settings.redis_dsn}?decode_responses=True&protocol=3"
     )
@@ -188,8 +194,9 @@ async def test_ingest_only_worker() -> None:
     await asyncio.sleep(1.5)
     # test that dummy has published its config
     worker_json = await get_published_worker_congig(rds)
-    assert json.loads(worker_json[0])["name"] == "dummy"
-    assert json.loads(worker_json[0])["parameters_hash"] is None
+    for w in worker_json:
+        assert json.loads(w)["name"] == "dummy"
+        assert json.loads(w)["parameters_hash"] is None
 
     # what if we publish a new map?
     await publish_controller_update(rds)
@@ -201,17 +208,17 @@ async def test_ingest_only_worker() -> None:
     # Create a state/settings for our fake ingester
     # iport = 10000
     isettings = IngesterSettings(
-        ingester_name="fake_ingester",
-        ingester_streams=["fake_stream"],
-        # ingester_url = f"tcp://localhost:{iport}",
-    )
+        ingester_name=IngesterName("fake_ingester"),
+        ingester_streams=[StreamName("fake_stream")],
+        # ingester_url = f"tcp://localhost:{iport}", # just use the default
+    )  # type: ignore[call-arg]
     istate = IngesterState(
         name=isettings.ingester_name,
         url=isettings.ingester_url,
         streams=isettings.ingester_streams,
     )
 
-    # create a dummy ingester either a dumb ROUTER socket or spin up a full ingester
+    # create a dummy ingester with a ROUTER socket
     ctx = zmq.asyncio.Context()
     out_socket = ctx.socket(zmq.ROUTER)
     out_socket.setsockopt(zmq.ROUTER_MANDATORY, 1)
@@ -222,7 +229,7 @@ async def test_ingest_only_worker() -> None:
     # configs = await self.redis.keys(RedisKeys.config("ingester"))
     # who publishes it, the controller or the ingester?
     # I think it's the ingester with publish_config()
-    async with rds.pipeline() as pipe:
+    async with rds.pipeline() as pipe:  # type: ignore[attr-defined]
         await pipe.setex(
             RedisKeys.config("ingester", istate.name),
             10,
