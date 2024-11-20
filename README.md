@@ -18,6 +18,6 @@ The `dranspose` cli wrapper allows to start different parts of the system or run
 
 ## Testing
 
-To get debug logs for the tests which are useful when debugging use
+For the tests to work, you need to be run a local instance of redis on port  ([the redis-stack docker image](https://redis.io/docs/latest/operate/oss_and_stack/install/install-stack/docker/), for instance). To get debug logs for the tests which are useful when debugging use
 
     pytest --log-cli-level=DEBUG
