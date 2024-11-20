@@ -6,6 +6,7 @@ import redis.asyncio as redis
 from redis import Redis
 import zmq
 import zmq.asyncio
+from zmq.utils.monitor import parse_monitor_message
 
 from pydantic import UUID4
 import pytest
@@ -17,17 +18,18 @@ from dranspose.helpers.utils import parameters_hash, done_callback, cancel_and_w
 from dranspose.protocol import (
     GENERIC_WORKER,
     ControllerUpdate,
-    DistributedStateEnum,
-    EventNumber,
+    # DistributedStateEnum,
+    # EventNumber,
+    # ReducerUpdate,
     RedisKeys,
     ParameterName,
     ReducerState,
-    ReducerUpdate,
     WorkParameter,
     WorkerName,
     IngesterState,
     ConnectedWorker,
     StreamName,
+    ZmqUrl,
 )
 
 from dranspose.distributed import DistributedService, DistributedSettings
@@ -197,9 +199,16 @@ class IngestOnlyWorker(Worker):
 async def publish_state(
     rds: Redis, state: WorkerState | IngesterState | ReducerState
 ) -> None:
+    if isinstance(state, WorkerState):
+        key = "worker"
+    elif isinstance(state, IngesterState):
+        key = "ingester"
+    elif isinstance(state, ReducerState):
+        key = "reducer"
     async with rds.pipeline() as pipe:  # type: ignore[attr-defined]
+        logging.info(f"publish key {(key, state.name)}")
         await pipe.setex(
-            RedisKeys.config("ingester", state.name),
+            RedisKeys.config(key, state.name),  # reducer name is ignored
             10,
             state.model_dump_json(),
         )
@@ -306,7 +315,7 @@ class ReduceOnlyWorker(Worker):
         pass
 
     async def close(self) -> None:
-        await cancel_and_wait(self.manage_ingester_task)
+        await cancel_and_wait(self.manage_receiver_task)
         if self.dequeue_task is not None:
             await cancel_and_wait(self.dequeue_task)
         await self.redis.delete(RedisKeys.config("worker", self.state.name))
@@ -322,7 +331,7 @@ class ReduceOnlyWorker(Worker):
 async def test_reduce_only_worker() -> None:
     dummy = ReduceOnlyWorker(WorkerSettings(worker_name=WorkerName("dummy")))
 
-    assert dummy._distributed_settings is not None
+    assert dummy._distributed_settings is not None  # appease mypy
     rds: Redis = redis.from_url(
         f"{dummy._distributed_settings.redis_dsn}?decode_responses=True&protocol=3"
     )
@@ -339,12 +348,13 @@ async def test_reduce_only_worker() -> None:
     assert workers[0].parameters_hash is None
 
     # what if we publish a new map?
-    m = MappingSequence(parts={}, sequence=[])
+    empty_map = {}
+    m = MappingSequence(parts=empty_map, sequence=[])
     await publish_controller_update(rds, m)
     await asyncio.sleep(1.5)
     # now the dummy parameters should be {} and have a corresponding hash
     workers = await get_published_worker_config(rds)
-    assert workers[0].parameters_hash == parameters_hash({})
+    assert workers[0].parameters_hash == parameters_hash(empty_map)
 
     # Create a state/settings for our fake reducer
     rsettings = ReducerSettings()
@@ -357,33 +367,48 @@ async def test_reduce_only_worker() -> None:
     ctx = zmq.asyncio.Context()
     in_socket = ctx.socket(zmq.PULL)
     in_socket.bind(f"tcp://*:{rsettings.reducer_url.port}")
+    monitor_socket = in_socket.get_monitor_socket()
 
     # publish reducer key/state
     await publish_state(rds, rstate)
-    ru = ReducerUpdate(
-        state=DistributedStateEnum.IDLE,
-        completed=EventNumber(0),
-        worker=dummy.state.name,
+
+    # publish update (not required)
+    # ru = ReducerUpdate(
+    #     state=DistributedStateEnum.IDLE,
+    #     completed=None,
+    #     worker=dummy.state.name,
+    # )
+    # await rds.xadd(
+    #     RedisKeys.ready(rstate.mapping_uuid),
+    #     {"data": ru.model_dump_json()},
+    # )
+
+    await asyncio.sleep(10)
+
+    # verify that worker has picked up the reducer
+    assert dummy._reducer_service_uuid == rstate.service_uuid
+
+    # check if the worker is connected
+    event = await monitor_socket.recv_multipart(flags=zmq.NOBLOCK)
+    event_enum = parse_monitor_message(event)
+    logging.info(f"Monitor event: {event_enum}")
+    assert event_enum["event"] == zmq.Event.ACCEPTED
+
+    # can you also look at the status published on redis?
+
+    # change service_uuid and verify that worker drops the reducer
+    rstate_new = ReducerState(
+        url=ZmqUrl("tcp://localhost:10201"),
+        mapping_uuid=m.uuid,
     )
+    assert rstate.service_uuid != rstate_new.service_uuid
+    # publish reducer key/state
+    await publish_state(rds, rstate_new)
 
-    await rds.xadd(
-        RedisKeys.ready(rstate.mapping_uuid),
-        {"data": ru.model_dump_json()},
-    )
+    await asyncio.sleep(10)
 
-    await asyncio.sleep(1.5)
-
-    # do I need to accept the worker?
-
-    # verify that worker has sent its identity to the ingester
-
-    # verify that worker has picked up the ingester, how?
-    logging.info(f"{dummy._reducer_service_uuid=}")
-    assert dummy._reducer_service_uuid == rsettings.reducer_url
-
-    # one can also look at the status published on redis
-
-    # change service_uuid and verify that worker drops ingester
+    # verify that worker has picked up the reducer
+    assert dummy._reducer_service_uuid == rstate_new.service_uuid
 
     await dummy.close()
     await cleanup_redis(rds)
