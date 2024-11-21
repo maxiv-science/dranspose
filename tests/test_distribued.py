@@ -57,15 +57,9 @@ class DummyWorker(DistributedService):
 
 async def cleanup_redis(rds: Redis) -> None:
     await rds.delete(RedisKeys.updates())
-    queues = await rds.keys(RedisKeys.ready("*"))
-    if len(queues) > 0:
-        await rds.delete(*queues)
-    assigned = await rds.keys(RedisKeys.assigned("*"))
-    if len(assigned) > 0:
-        await rds.delete(*assigned)
-    params = await rds.keys(RedisKeys.parameters("*", "*"))
-    if len(params) > 0:
-        await rds.delete(*params)
+    keys = await rds.keys(f"{RedisKeys.PREFIX}:*")
+    if len(keys) > 0:
+        await rds.delete(*keys)
 
 
 async def publish_controller_update(
