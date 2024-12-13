@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from dranspose.mapping import NotYetAssigned, MappingSequence, Map
+from dranspose.mapping import NotYetAssigned, ActiveSequence, Map
 from dranspose.protocol import (
     VirtualWorker,
     StreamName,
@@ -17,7 +17,7 @@ from dranspose.protocol import (
 
 def test_expand() -> None:
     ntrig = 10
-    p = MappingSequence(
+    p = ActiveSequence(
         parts={
             MappingName("main"): {
                 StreamName("test"): [
@@ -39,7 +39,7 @@ def test_expand() -> None:
 
 def test_expand_double() -> None:
     ntrig = 10
-    p = MappingSequence(
+    p = ActiveSequence(
         parts={
             MappingName("main"): {
                 StreamName("test"): [
@@ -62,7 +62,7 @@ def test_expand_double() -> None:
 
 def test_expand_double_streams() -> None:
     ntrig = 10
-    p = MappingSequence(
+    p = ActiveSequence(
         parts={
             MappingName("main"): {
                 StreamName("test"): [
@@ -99,7 +99,7 @@ def test_expand_double_streams() -> None:
 def test_wrong_sequence() -> None:
     with pytest.raises(AssertionError):
         ntrig = 6
-        MappingSequence(
+        ActiveSequence(
             parts={
                 MappingName("main"): {
                     StreamName("test"): [
@@ -116,7 +116,7 @@ def test_wrong_sequence() -> None:
 def test_huge() -> None:
     ntrig = 1000
     reps = 980
-    p = MappingSequence(
+    p = ActiveSequence(
         parts={
             MappingName("main"): {
                 StreamName("test"): [
@@ -134,7 +134,7 @@ def test_huge() -> None:
 def test_useless_worker() -> None:
     ntrig = 1000
     reps = 20
-    m = MappingSequence(
+    m = ActiveSequence(
         parts={
             MappingName("main"): {
                 StreamName("test"): [
@@ -188,7 +188,7 @@ def test_useless_worker() -> None:
 
 
 def test_none() -> None:
-    m = MappingSequence(
+    m = ActiveSequence(
         parts={
             MappingName("main"): {
                 StreamName("test"): [
@@ -236,7 +236,7 @@ def test_none() -> None:
 
 def test_discard() -> None:
     ntrig = 10
-    m = MappingSequence(
+    m = ActiveSequence(
         parts={
             MappingName("main"): {StreamName("test"): [[] for i in range(ntrig // 2)]}
         },
@@ -265,7 +265,7 @@ def test_discard() -> None:
 
 
 def test_partial_discard() -> None:
-    m = MappingSequence(
+    m = ActiveSequence(
         parts={
             MappingName("use"): {
                 StreamName("test"): [
@@ -311,7 +311,7 @@ def test_partial_discard() -> None:
 
 def test_discard_only_one() -> None:
     ntrig = 10
-    m = MappingSequence(
+    m = ActiveSequence(
         parts={
             MappingName("main"): {
                 StreamName("test"): [[] for i in range(ntrig // 2)],
@@ -346,7 +346,7 @@ def test_discard_only_one() -> None:
 
 
 def test_auto() -> None:
-    m = MappingSequence(
+    m = ActiveSequence(
         parts={
             MappingName("main"): {
                 StreamName("test"): [
@@ -385,7 +385,7 @@ def test_auto() -> None:
 
 
 def test_all() -> None:
-    m = MappingSequence(
+    m = ActiveSequence(
         parts={
             MappingName("main"): {
                 StreamName("test"): [
@@ -437,7 +437,7 @@ def test_all() -> None:
 
 
 def test_multi_all() -> None:
-    m = MappingSequence(
+    m = ActiveSequence(
         parts={
             MappingName("main"): {
                 StreamName("test"): [
@@ -502,7 +502,7 @@ def test_multi_all() -> None:
 
 
 def test_multiple() -> None:
-    m = MappingSequence(
+    m = ActiveSequence(
         parts={
             MappingName("main"): {
                 StreamName("eiger"): [
@@ -557,7 +557,7 @@ def test_multiple() -> None:
 
 
 def test_mixed_all() -> None:
-    m = MappingSequence(
+    m = ActiveSequence(
         parts={
             MappingName("main"): {
                 StreamName("eiger"): [
@@ -604,7 +604,7 @@ def test_mixed_all() -> None:
 
 
 def test_all_wrap_tags() -> None:
-    m = MappingSequence(
+    m = ActiveSequence(
         parts={
             MappingName("main"): {
                 StreamName("test"): [
@@ -676,7 +676,7 @@ def test_all_wrap_tags() -> None:
 
 def test_uniform() -> None:
     m = Map.from_uniform({StreamName("orca"), StreamName("panda")}, 10)
-    s = MappingSequence(
+    s = ActiveSequence(
         parts={MappingName("sardana"): m.mapping},
         sequence=[MappingName("sardana")],
         add_start_end=True,
@@ -692,7 +692,7 @@ def test_uniform() -> None:
 
 def test_huge_map() -> None:
     ntrig = 10_000
-    m = MappingSequence(
+    m = ActiveSequence(
         parts={
             MappingName("main"): {
                 StreamName("test"): [

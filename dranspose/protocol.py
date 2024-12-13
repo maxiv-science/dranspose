@@ -120,8 +120,14 @@ class ProtocolException(Exception):
     pass
 
 
+class Sequence(BaseModel):
+    parts: dict[MappingName, dict[StreamName, list[Optional[list[VirtualWorker]]]]]
+    sequence: list[MappingName]
+
+
 class ControllerUpdate(BaseModel):
     mapping_uuid: UUID4
+    sequence: Optional[Sequence] = None
     parameters_version: dict[ParameterName, UUID4]
     target_parameters_hash: Optional[HashDigest] = None
     active_streams: list[StreamName] = []

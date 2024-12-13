@@ -20,7 +20,7 @@ from starlette.responses import Response, FileResponse
 
 from dranspose.distributed import DistributedSettings
 from dranspose.helpers.utils import parameters_hash, done_callback, cancel_and_wait
-from dranspose.mapping import MappingSequence, Map
+from dranspose.mapping import ActiveSequence, Map
 import redis.asyncio as redis
 import redis.exceptions as rexceptions
 from importlib.metadata import version
@@ -79,7 +79,7 @@ class Controller:
         self.redis = redis.from_url(
             f"{self.settings.redis_dsn}?decode_responses=True&protocol=3"
         )
-        self.mapping = MappingSequence(parts={}, sequence=[])
+        self.mapping = ActiveSequence(parts={}, sequence=[])
         self.mapping_update_lock = asyncio.Lock()
         self.parameters: dict[ParameterName, WorkParameter] = {}
         self.parameters_hash = parameters_hash(self.parameters)
@@ -220,13 +220,7 @@ class Controller:
         """Saves all current parameters to a JSON/bin file if dump_prefix is defined."""
         dump_prefix = self.parameters[ParameterName("dump_prefix")].data.decode("utf8")
         if len(dump_prefix) > 0:
-            parts = {
-                str(n): m.model_dump(mode="json") for n, m in self.mapping.parts.items()
-            }
-            mapping_json = {
-                "parts": parts,
-                "sequence": self.mapping.sequence,
-            }
+            mapping_json = self.mapping.seq.model_dump_json()
             filename = f"{dump_prefix}mapping-{self.mapping.uuid}.json"
             try:
                 with open(filename, "w") as f:
@@ -256,7 +250,7 @@ class Controller:
             except Exception as e:
                 logger.error(f"Could not write parameters dump {e}")
 
-    async def set_mapping(self, m: MappingSequence) -> None:
+    async def set_mapping(self, m: ActiveSequence) -> None:
         async with self.mapping_update_lock:
             logger.debug("cancelling assign task")
             await cancel_and_wait(self.assign_task)
@@ -272,6 +266,7 @@ class Controller:
             self.mapping = m
             cupd = ControllerUpdate(
                 mapping_uuid=self.mapping.uuid,
+                sequence=self.mapping.seq,
                 parameters_version={n: p.uuid for n, p in self.parameters.items()},
                 active_streams=list(m.all_streams),
             )
@@ -714,7 +709,7 @@ async def set_mapping(
             status_code=400,
             detail=f"streams {set(mapping.keys()) - set(config.get_streams())} not available",
         )
-    m = MappingSequence(
+    m = ActiveSequence(
         parts={MappingName("main"): mapping},
         sequence=[MappingName("main")],
         add_start_end=all_wrap,
@@ -747,7 +742,7 @@ async def set_sequence(
 ) -> UUID4 | str:
     global ctrl
     config = await ctrl.get_configs()
-    m = MappingSequence(
+    m = ActiveSequence(
         parts=parts,
         sequence=sequence,
         add_start_end=all_wrap,
@@ -817,7 +812,7 @@ async def set_sardana_hook(
         set(config.get_streams()).intersection(set(info["streams"])),
         info["scan"]["nb_points"],
     )
-    s = MappingSequence(
+    s = ActiveSequence(
         parts={MappingName("sardana"): m.mapping},
         sequence=[MappingName("sardana")],
         add_start_end=True,

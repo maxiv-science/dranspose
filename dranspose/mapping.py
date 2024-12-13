@@ -6,6 +6,7 @@ from typing import Optional, Iterable
 from pydantic import validate_call, field_validator, BaseModel
 
 from dranspose.protocol import (
+    Sequence,
     WorkAssignment,
     StreamName,
     VirtualWorker,
@@ -237,7 +238,7 @@ class ActiveMap(Map):
             print("")
 
 
-class MappingSequence:
+class ActiveSequence:
     """
     As the Mapping for many points quickly become large and allocate large amounts of memory,
     we make use of the repetitive structure.
@@ -278,7 +279,9 @@ class MappingSequence:
         self.uuid = uuid.uuid4()
         self.complete_events = 0
 
-        self.queued_workers = []
+        self.queued_workers: list[
+            tuple[WorkerState, list[WorkerState], EventNumber | None]
+        ] = []
 
         self.current_sequence_index = 0
         first_active = ActiveMap(
@@ -286,6 +289,9 @@ class MappingSequence:
             mapping=self.parts[self.sequence[self.current_sequence_index]].mapping,
         )
         self.active_maps = [first_active]
+        self.seq = Sequence(
+            sequence=self.sequence, parts={n: m.mapping for n, m in self.parts.items()}
+        )
 
     def len(self) -> int:
         return sum((self.parts[seq].no_events() for seq in self.sequence))
