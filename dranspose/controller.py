@@ -36,6 +36,7 @@ from dranspose.parameters import (
 )
 from dranspose.protocol import (
     IngesterState,
+    Sequence,
     WorkerState,
     RedisKeys,
     EnsembleState,
@@ -729,9 +730,9 @@ async def set_mapping(
 
 
 @app.get("/api/v1/mapping")
-async def get_mapping() -> dict[str, Any]:
+async def get_mapping() -> Sequence:
     global ctrl
-    return {"parts": ctrl.mapping.parts, "sequence": ctrl.mapping.sequence}
+    return ctrl.mapping.seq
 
 
 @app.post("/api/v1/sequence")
