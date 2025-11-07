@@ -5,11 +5,9 @@ from typing import Callable, Optional, Awaitable, Any, Coroutine
 import h5pyd
 import aiohttp
 import pytest
-import uvicorn
 import zmq
 from pydantic_core import Url
 
-from dranspose.controller import app
 from dranspose.ingester import Ingester
 from dranspose.ingesters.zmqpull_single import (
     ZmqPullSingleIngester,
@@ -32,7 +30,6 @@ async def test_empty_params(
     create_ingester: Callable[[Ingester], Awaitable[Ingester]],
     stream_eiger: Callable[[zmq.Context[Any], int, int], Coroutine[Any, Any, None]],
 ) -> None:
-
     await reducer("examples.params.reducer:ParamReducer")
     await create_worker(
         Worker(
@@ -114,4 +111,3 @@ async def test_empty_params(
         await loop.run_in_executor(None, work)
 
         context.destroy()
-
