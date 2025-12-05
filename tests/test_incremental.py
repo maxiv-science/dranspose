@@ -32,7 +32,7 @@ def test_2d() -> None:
     print("data", data)
     idx = np.arange(rows)
     rng.shuffle(idx)
-    buf = IncrementalBuffer(initial_rows=2, filler_value=np.nan)
+    buf = IncrementalBuffer(initial_rows=2, grow_factor=1.3, filler_value=np.nan)
     for e, i in enumerate(idx):
         buf.add_entry(i, data[i])
         if e == 0:
