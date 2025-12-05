@@ -13,13 +13,15 @@ class IncrementalBuffer:
         grow_factor: float = 2,
         filler_value: Union[int, float, np.nan] = 0,
     ) -> None:
-        self._capacity: int = max(1, int(initial_rows))
+        assert isinstance(initial_rows, int)
+        assert initial_rows >= 1
+        self._capacity = initial_rows
         self._dtype: Optional[np.dtype] = None
         self._arr: Optional[np.ndarray] = None
         self._max_filled_index: int = -1
         self._filler_value = filler_value
         assert grow_factor > 1, "The grow factor must be > 1"
-        self._user_grow_factor: float = grow_factor
+        self._grow_factor: float = grow_factor
 
     def _init_buffer(self, first_entry: np.ndarray) -> None:
         self._dtype = first_entry.dtype
@@ -34,7 +36,8 @@ class IncrementalBuffer:
             return
         new_shape = list(self._arr.shape)
         while new_shape[0] < req_size:
-            new_shape[0] = new_shape[0] * self._user_grow_factor
+            new_shape[0] = int(new_shape[0] * self._grow_factor)
+        # FIXME compare with ndarray.resize
         new_arr = np.full(new_shape, self._filler_value, dtype=self._dtype)
         new_arr[: self._arr.shape[0]] = self._arr
         self._arr = new_arr
