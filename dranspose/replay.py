@@ -9,6 +9,7 @@ import threading
 import time
 import traceback
 from typing import ContextManager, Iterator, Any, Optional, IO, Tuple
+import itertools
 
 import cbor2
 import uvicorn
@@ -257,7 +258,8 @@ def replay(
     broadcast_first: bool = True,
     done_event: threading.Event | None = None,
     start_event: threading.Event | None = None,
-    latency: float | None = None,
+    latency: float = 0,
+    loop: bool = False,
 ) -> None:
     if source is not None:
         sourcecls = utils.import_class(source)
@@ -267,6 +269,8 @@ def replay(
         gens = [get_internals(f) for f in zmq_files]
     else:
         gens = []
+    if loop:
+        gens = list(map(itertools.cycle, gens))
 
     workercls = utils.import_class(wclass)
     logger.info("custom worker class %s", workercls)
@@ -347,9 +351,9 @@ def replay(
                         reducer_app.state.parameters,
                         tick,
                     )
-                if latency is not None:
-                    time.sleep(latency)
+                time.sleep(latency)
             except StopIteration:
+                # gens = [get_internals(f) for f in zmq_files]
                 logger.debug("end of replay, calling finish")
                 _finish(workers, reducer, reducer_app.state.parameters)
                 break
@@ -366,4 +370,3 @@ def replay(
             stop_event.wait()
         except KeyboardInterrupt:
             pass
-        logger.info("replay finished")
