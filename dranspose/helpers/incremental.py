@@ -4,15 +4,22 @@ from typing import Optional, Union
 
 class IncrementalBuffer:
     """
-    Buffer incoming lines (scalars or 1-D rows) that may arrive out-of-order.
+    Buffer incoming entries (scalars or arrays) that may arrive out-of-order.
     """
 
     def __init__(
         self,
         initial_rows: int = 16,
         grow_factor: float = 2,
-        filler_value: Union[int, float, np.nan] = 0,
+        filler_value: Union[int, float] = 0,
+        no_gaps: bool = False,
     ) -> None:
+        """
+        :param int initial_rows: Size of the initial biffer
+        :param float grow_factor: Increased factor when the buffer needs to grow
+        :param int|float filler_value: Default value for unreceived entries
+        :param bool no_gaps: Return only contiguous entries when viewd as an array
+        """
         assert isinstance(initial_rows, int)
         assert initial_rows >= 1
         self._capacity = initial_rows
@@ -22,6 +29,9 @@ class IncrementalBuffer:
         self._filler_value = filler_value
         assert grow_factor > 1, "The grow factor must be > 1"
         self._grow_factor: float = grow_factor
+        self._no_gaps = no_gaps
+        self._seen = set()
+        self._next_missing: int = 0
 
     def _init_buffer(self, first_entry: np.ndarray) -> None:
         self._dtype = first_entry.dtype
@@ -36,16 +46,23 @@ class IncrementalBuffer:
             return
         new_shape = list(self._arr.shape)
         while new_shape[0] < req_size:
-            new_shape[0] = int(new_shape[0] * self._grow_factor)
-        # FIXME compare with ndarray.resize
-        new_arr = np.full(new_shape, self._filler_value, dtype=self._dtype)
-        new_arr[: self._arr.shape[0]] = self._arr
-        self._arr = new_arr
+            new_shape[0] = max(int(new_shape[0] * self._grow_factor), new_shape[0] + 1)
+            self._arr.resize(new_shape, refcheck=False)
+            if self._filler_value != 0:
+                self._arr[self._max_filled_index + 1 :] = self._filler_value
+        # new_arr = np.full(new_shape, self._filler_value, dtype=self._dtype)
+        # new_arr[: self._arr.shape[0]] = self._arr
+        # self._arr = new_arr
 
     def add_entry(self, index: int, data: np._typing.ArrayLike) -> None:
         """
         Insert a scalar or array at the specified index (0-based).
         """
+        if index >= self._next_missing:
+            self._seen.add(index)
+        while self._next_missing in self._seen:
+            self._seen.remove(self._next_missing)
+            self._next_missing += 1
         entry = np.array(data)
         if self._arr is None:
             self._init_buffer(entry)
@@ -65,14 +82,15 @@ class IncrementalBuffer:
     def is_empty(self):
         return self._arr is None
 
-    def preview(self, copy: bool = True) -> np.ndarray:
+    def preview(self, copy: bool = True, no_gaps: bool = False) -> np.ndarray:
         if self._arr is None:
             return np.zeros((0,))
-        curr_view = self._arr[: self._max_filled_index + 1]
+        last = self._next_missing if no_gaps else self._max_filled_index + 1
+        curr_view = self._arr[:last]
         return curr_view.copy() if copy else curr_view
 
     def __array__(self, dtype: Optional[np.dtype] = None) -> np.ndarray:
-        out = self.preview(copy=False)
+        out = self.preview(copy=False, no_gaps=self._no_gaps)
         if dtype is not None:
             return out.astype(dtype, copy=False)
         return out
