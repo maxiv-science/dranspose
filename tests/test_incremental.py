@@ -37,7 +37,14 @@ def test_no_gaps() -> None:
         initial_rows=2, grow_factor=2, filler_value=-1, no_gaps=True
     )
 
-    for i in range(6):
+    assert not buf.has_entry(0)
+    buf.add_entry(1, data[1])
+    assert not buf.has_entry(0)
+    buf.add_entry(0, data[0])
+    assert buf.has_entry(0)
+
+    for i in range(2, 6):
+        assert not buf.has_entry(i)
         buf.add_entry(i, data[i])
         assert buf.has_entry(i)
     assert not buf.has_entry(7)
