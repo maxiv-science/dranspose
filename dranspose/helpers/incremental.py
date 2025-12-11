@@ -79,6 +79,9 @@ class IncrementalBuffer:
         if index > self._max_filled_index:
             self._max_filled_index = index
 
+    def has_entry(self, index: int):
+        return index < self._next_missing or index in self._seen
+
     def is_empty(self):
         return self._arr is None
 

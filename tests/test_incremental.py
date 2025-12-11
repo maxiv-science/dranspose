@@ -33,21 +33,30 @@ def test_no_gaps() -> None:
     n = 10
     data = np.arange(n)
     logger.debug(f"{data=}")
-    buf = IncrementalBuffer(initial_rows=2, grow_factor=2, filler_value=-1)
+    buf = IncrementalBuffer(
+        initial_rows=2, grow_factor=2, filler_value=-1, no_gaps=True
+    )
 
     for i in range(6):
         buf.add_entry(i, data[i])
+        assert buf.has_entry(i)
+    assert not buf.has_entry(7)
     buf.add_entry(7, data[7])
+    assert buf.has_entry(7)
     logger.debug(f"{buf._arr=} {buf._seen=} {buf._next_missing=}")
     assert buf._seen == {7}
     assert buf._next_missing == 6
 
     buf.add_entry(8, data[8])
+    assert buf.has_entry(8)
     logger.debug(f"{buf._arr=} {buf._seen=} {buf._next_missing=}")
     assert buf._seen == {7, 8}
     assert buf._next_missing == 6
+    assert np.allclose(buf, [0, 1, 2, 3, 4, 5])  # test no_gaps
 
+    assert not buf.has_entry(6)
     buf.add_entry(6, data[6])
+    assert buf.has_entry(6)
     logger.debug(f"{buf._arr=} {buf._seen=} {buf._next_missing=}")
     assert len(buf._seen) == 0
     assert buf._next_missing == 9
