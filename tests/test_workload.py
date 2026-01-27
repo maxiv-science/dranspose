@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 import zmq.asyncio
 import zmq
-from psutil._common import snicaddr, snetio
+from psutil._ntuples import snicaddr, snetio
 
 from dranspose.workload_generator import Statistics, NetworkConfig
 from tests.utils import consume_zmq
