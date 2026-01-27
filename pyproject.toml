@@ -24,7 +24,8 @@ dependencies = [
     # "requests",
     "pydantic",
     "pydantic-settings",
-    "cbor2",
+    # limit cbor until https://github.com/agronholm/cbor2/issues/272 is resolved.
+    "cbor2 < 5.8",
     "redis-logs",
     "h5py",
 ]
