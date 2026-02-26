@@ -180,6 +180,77 @@ async def test_replay(
     )
 
 
+
+@pytest.mark.skipif("config.getoption('rust')", reason="rust does not support dumping")
+@pytest.mark.asyncio
+async def test_replay_looping(
+    controller: None,
+    reducer: Callable[[Optional[str]], Awaitable[None]],
+    create_worker: Callable[[WorkerName], Awaitable[Worker]],
+    create_ingester: Callable[[Ingester], Awaitable[Ingester]],
+    stream_eiger: Callable[[zmq.Context[Any], int, int], Coroutine[Any, Any, None]],
+    stream_orca: Callable[[zmq.Context[Any], int, int], Coroutine[Any, Any, None]],
+    stream_small: Callable[[zmq.Context[Any], int, int], Coroutine[Any, Any, None]],
+    tmp_path: Any,
+) -> None:
+    p_eiger, p_prefix, uuid = await dump_data(
+        reducer,
+        create_worker,
+        create_ingester,
+        stream_eiger,
+        stream_orca,
+        stream_small,
+        tmp_path,
+    )
+    # read dump
+
+    par_file = generate_params(tmp_path)
+    stop_event = threading.Event()
+
+    thread = threading.Thread(
+        target=replay,
+        args=(
+            "tests.aux_payloads:TestWorker",
+            "tests.aux_payloads:TestReducer",
+            [p_eiger, f"{p_prefix}orca-ingester-{uuid}.cbors"],
+            None,
+            par_file,
+        ),
+        kwargs={"port": 5010, "stop_event": stop_event},
+    )
+    print("Starting thread for replay")
+    thread.start()
+    def work_pre() -> None:
+        print("worjpree! weehooo!")
+        ntrig = 10
+        f = h5pyd.File("http://localhost:5010/", "r", timeout=5)
+        logging.info("file %s", list(f.keys()))
+        print(list(f.keys()))
+
+    nrun = 0 
+    print("Starting polling loop soon")
+    await asyncio.sleep(10)
+    while True:
+        work_pre()
+        nrun += 1 
+        if nrun > 10:
+            assert False, "Waited too long"
+        asyncio.sleep(1)
+    print("Done")
+
+    # loop = asyncio.get_event_loop()
+    # await loop.run_in_executor(None, work_pre)
+    # # await work_pre()
+    #
+    logging.info("shut down server")
+    stop_event.set()
+
+    thread.join()
+    await asyncio.sleep(0.1)
+    logging.info("thread joined")
+
+
+
 @pytest.mark.skipif("config.getoption('rust')", reason="rust does not support dumping")
 @pytest.mark.asyncio
 async def test_replay_gzip(

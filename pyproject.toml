@@ -110,3 +110,8 @@ extend-exclude = '''
   docs/*
 )
 '''
+
+[dependency-groups]
+dev = [
+    "python-lsp-server>=1.14.0",
+]
