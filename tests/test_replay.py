@@ -180,7 +180,6 @@ async def test_replay(
     )
 
 
-
 @pytest.mark.skipif("config.getoption('rust')", reason="rust does not support dumping")
 @pytest.mark.asyncio
 async def test_replay_looping(
@@ -218,37 +217,25 @@ async def test_replay_looping(
         ),
         kwargs={"port": 5010, "stop_event": stop_event},
     )
-    print("Starting thread for replay")
     thread.start()
-    def work_pre() -> None:
-        print("worjpree! weehooo!")
-        ntrig = 10
+    await asyncio.sleep(2)
+    single_run_len_results = 10
+    test_pass = False
+    for _ in range(10):
         f = h5pyd.File("http://localhost:5010/", "r", timeout=5)
         logging.info("file %s", list(f.keys()))
-        print(list(f.keys()))
-
-    nrun = 0 
-    print("Starting polling loop soon")
-    await asyncio.sleep(10)
-    while True:
-        work_pre()
-        nrun += 1 
-        if nrun > 10:
-            assert False, "Waited too long"
-        asyncio.sleep(1)
-    print("Done")
-
-    # loop = asyncio.get_event_loop()
-    # await loop.run_in_executor(None, work_pre)
-    # # await work_pre()
-    #
+        len_results = len(f.get("results", []))
+        logging.info("Length of results: %s", len_results)
+        if len_results > single_run_len_results:
+            test_pass = True
+            break
+        await asyncio.sleep(1)
+    assert test_pass, "Results never had more than 10 entries"
     logging.info("shut down server")
     stop_event.set()
-
     thread.join()
     await asyncio.sleep(0.1)
     logging.info("thread joined")
-
 
 
 @pytest.mark.skipif("config.getoption('rust')", reason="rust does not support dumping")
