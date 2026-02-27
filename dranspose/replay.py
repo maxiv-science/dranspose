@@ -23,6 +23,7 @@ from dranspose.helpers import utils
 from dranspose.event import (
     InternalWorkerMessage,
     EventData,
+    EventNumber,
     ResultData,
     message_tag_hook,
 )
@@ -303,15 +304,15 @@ def replay(
         reducer_app, port=port or 5000, host="localhost", log_level="info"
     )
     server = Server(config)
-    # server.run()
-
     first = True
+    last_output_event_number = -1
 
     with server.run_in_thread(port):
         cache = [None for _ in gens]
         last_tick = 0.0
         if start_event is not None:
             start_event.wait()
+
         while True:
             try:
                 internals = [
@@ -320,6 +321,7 @@ def replay(
                 if len(internals) == 0:
                     break
                 lowestevn = min([ev.event_number for ev in internals])
+
                 lowinternals = []
                 cache = internals
                 for idx, ie in enumerate(internals):
@@ -327,6 +329,10 @@ def replay(
                         lowinternals.append(ie)
                         cache[idx] = None
                 event = EventData.from_internals(lowinternals)
+                if loop:
+                    if last_output_event_number > event.event_number:
+                        event.event_number = EventNumber(last_output_event_number + 1)
+                last_output_event_number = event.event_number
 
                 dst_worker_ids = [random.randint(0, len(workers) - 1)]
                 if first and broadcast_first:
@@ -352,8 +358,10 @@ def replay(
                         tick,
                     )
                 time.sleep(latency)
+                if stop_event is not None:
+                    if stop_event.is_set():
+                        raise StopIteration()
             except StopIteration:
-                # gens = [get_internals(f) for f in zmq_files]
                 logger.debug("end of replay, calling finish")
                 _finish(workers, reducer, reducer_app.state.parameters)
                 break

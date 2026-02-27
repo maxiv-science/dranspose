@@ -215,27 +215,39 @@ async def test_replay_looping(
             None,
             par_file,
         ),
-        kwargs={"port": 5010, "stop_event": stop_event},
+        kwargs={"port": 5010, "stop_event": stop_event, "loop": True, "latency": 0.1},
     )
     thread.start()
-    await asyncio.sleep(2)
-    single_run_len_results = 10
-    test_pass = False
-    for _ in range(10):
-        f = h5pyd.File("http://localhost:5010/", "r", timeout=5)
-        logging.info("file %s", list(f.keys()))
-        len_results = len(f.get("results", []))
-        logging.info("Length of results: %s", len_results)
-        if len_results > single_run_len_results:
-            test_pass = True
-            break
-        await asyncio.sleep(1)
-    assert test_pass, "Results never had more than 10 entries"
-    logging.info("shut down server")
-    stop_event.set()
-    thread.join()
-    await asyncio.sleep(0.1)
-    logging.info("thread joined")
+
+    async def check_poll_results() -> None:
+        print("Starting to poll hdf5-rest output with h5pyd")
+        await asyncio.sleep(2)
+        # NOTE: See https://github.com/felix-engelmann/dranspose/pull/58#discussion_r2861877247
+        #       the results have length 11, though the stream seems to be length 10
+        single_run_len_results = 11
+        max_wait_time = 5
+        wait_step_duration = 0.5
+        wait_total_steps = int((max_wait_time // wait_step_duration) + 1)
+        for _ in range(wait_total_steps):
+            f = h5pyd.File("http://localhost:5010/", "r", timeout=5)
+            len_results = len(f.get("results", []))
+            print("Length of results:", len_results)
+
+            if len_results > single_run_len_results:
+                return
+            await asyncio.sleep(wait_step_duration)
+        assert False, "Results never had more than 10 entries"
+
+    try:
+        await check_poll_results()
+    except Exception as err:
+        raise Exception from err
+    finally:
+        logging.info("shut down server")
+        stop_event.set()
+        thread.join()
+        await asyncio.sleep(0.1)
+        logging.info("thread joined")
 
 
 @pytest.mark.skipif("config.getoption('rust')", reason="rust does not support dumping")
