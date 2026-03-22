@@ -47,7 +47,7 @@ async def dump_data(
     await create_worker(WorkerName("w3"))
 
     p_eiger = tmp_path / "eiger_dump.cbors"
-    print(p_eiger, type(p_eiger))
+    logging.info("%s %s", p_eiger, type(p_eiger))
 
     await create_ingester(
         ZmqPullSingleIngester(
@@ -220,7 +220,7 @@ async def test_replay_looping(
     thread.start()
 
     async def check_poll_results() -> None:
-        print("Starting to poll hdf5-rest output with h5pyd")
+        logging.info("Starting to poll hdf5-rest output with h5pyd")
         await asyncio.sleep(2)
         # NOTE: See https://github.com/felix-engelmann/dranspose/pull/58#discussion_r2861877247
         #       the results have length 11, though the stream seems to be length 10
@@ -231,7 +231,7 @@ async def test_replay_looping(
         for _ in range(wait_total_steps):
             f = h5pyd.File("http://localhost:5010/", "r", timeout=5)
             len_results = len(f.get("results", []))
-            print("Length of results:", len_results)
+            logging.info("Length of results: %s", len_results)
 
             if len_results > single_run_len_results:
                 return
