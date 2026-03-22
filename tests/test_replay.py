@@ -233,7 +233,7 @@ async def test_replay_looping(
             len_results = len(f.get("results", []))
             logging.info("Length of results: %s", len_results)
 
-            if len_results > single_run_len_results:
+            if len_results > 2 * single_run_len_results:
                 return
             await asyncio.sleep(wait_step_duration)
         assert False, "Results never had more than 10 entries"
@@ -245,6 +245,7 @@ async def test_replay_looping(
     finally:
         logging.info("shut down server")
         stop_event.set()
+        await asyncio.sleep(0.1)
         thread.join()
         await asyncio.sleep(0.1)
         logging.info("thread joined")
